@@ -7,12 +7,17 @@ import java.util.concurrent.Callable;
         description = "Compare different packaging algorithms. (dp)",
         name = "PackPerfTest",
         mixinStandardHelpOptions = true,
-        version = "v1.0"
+        version = "v1.0",
+        descriptionHeading = "Large text files for testing can be downloaded from here: https://dumps.wikimedia.org/enwiki/latest/"
+
 )
 public class Application implements Callable<Void> {
 
-    @CommandLine.Option(required = true, names = {"-i", "--inputDir"}, description = "The file whose checksum to calculate.")
+    @CommandLine.Option(required = true, names = {"-i", "--inputDir"}, description = "Input directory which contains text files.")
     private String inputDir;
+
+    @CommandLine.Option(required = false, names = {"-o", "--outputDir"}, description = "Output dir for results.", defaultValue = "./output")
+    private String outputDir;
 
     public static void main(String[] args) throws Exception {
         CommandLine.call(new Application(), args);
@@ -24,8 +29,10 @@ public class Application implements Callable<Void> {
         Funcs.log.accept("*** Process started ***");
 
         Funcs.listFiles(Path.of(inputDir))
-                .filter(Funcs.isGzipFile);
-        //.parallel()
+                .filter(Funcs.isGzipFile)
+                .map(Funcs::toProcessableItem)
+                .map(Funcs::toGunzipStream)
+                .forEach(Funcs::writeItemToFile);
 
         return null;
     }
