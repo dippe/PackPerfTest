@@ -1,7 +1,6 @@
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Date;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -80,10 +79,16 @@ public interface Funcs {
 
     static void writeItemToFile(ProcessableItem item) {
         try {
-            FileOutputStream fileOutputStream = new FileOutputStream(item.fileName + ".out.txt");
+            final String outFileName = item.fileName + ".out.txt";
+
+            FileOutputStream fileOutputStream = new FileOutputStream(outFileName);
             item.inputStream.transferTo(fileOutputStream);
             fileOutputStream.close();
             item.inputStream.close();
+
+            Path inFile = Path.of(item.fileName);
+            Path outFile = Path.of(outFileName);
+            log.accept("Output file: " + outFile.getParent() + "\\" + outFile.getFileName() + "(" + Files.size(outFile) / 1000 / 1000 + "MB)");
         } catch (IOException e) {
             log.accept("Cannot Write Data: " + item.fileName.toString());
             throw new RuntimeException(e.getMessage());
@@ -97,20 +102,50 @@ public interface Funcs {
 
     static Predicate<Path> isLz4File = path -> path.getFileName().toString().endsWith(".lz4");
 
+    // wrap checked exceptions
+    static <T, R> Function<T, R> exceptionWrapper(Function<T, R> processor) {
+        return t -> {
+            try{
+                return processor.apply(t);
+            } catch (Exception e){
+                throw new RuntimeException(e);
+            }
+        };
+    }
 
-    static void printRunTime(String msg, Path fileToProcess, Consumer<Path> processor) {
-        Date startTime = new Date();
+    static <T> Function<T, T> printRunTimeWrapper(String msg, Function<T, T> processor) {
+        return (T param) -> {
+            log.accept("*** Start: " + msg + " ***");
 
-        processor.accept(fileToProcess);
+            long startTime = System.nanoTime();
 
-        Date endTime = new Date();
-        Long delta = endTime.getTime() - startTime.getTime();
+            T apply = processor.apply(param);
 
-//        log.accept("Unpack file: " + path.getParent() + "\\" + path.getFileName() + "(" + Files.size(path) / 1000 / 1000 + "MB)");
+            long endTime = System.nanoTime();
+            Long deltaUs = (endTime - startTime) / 10000;
+            Long deltaMs = (endTime - startTime) / 1000000;
 
-        log.accept("*** " + msg + " ***");
-        log.accept("Elapsed time: " + delta.toString() + "ms");
-        log.accept("*** End " + msg + " ***");
+            log.accept("Elapsed time: " + deltaUs.toString() + "μs / " + deltaMs.toString() + "ms");
+            log.accept("*** End: " + msg + " ***");
+            return apply;
+        };
+    }
+
+    static <T> Consumer<T> printRunTimeWrapper(String msg, Consumer<T> processor) {
+        return (T param) -> {
+            log.accept("*** Start: " + msg + " ***");
+
+            long startTime = System.nanoTime();
+
+            processor.accept(param);
+
+            long endTime = System.nanoTime();
+            Long deltaUs = (endTime - startTime) / 10000;
+            Long deltaMs = (endTime - startTime) / 1000000;
+
+            log.accept("Elapsed time: " + deltaUs.toString() + "μs / " + deltaMs.toString() + "ms");
+            log.accept("*** End: " + msg + " ***");
+        };
     }
 
     static final Consumer<String> log = s -> System.out.println(s);
@@ -123,6 +158,10 @@ public interface Funcs {
                     .map(lineMapper);
             return stringStream;
         });
+    }
+
+    static String actTime(long initTime){
+        return ((System.nanoTime() - initTime) / 1000000) + "ms";
     }
 
 }

@@ -1,5 +1,7 @@
 import picocli.CommandLine;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
@@ -26,13 +28,26 @@ public class Application implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
+        final long initTime = System.nanoTime();
+
         Funcs.log.accept("*** Process started ***");
 
         Funcs.listFiles(Path.of(inputDir))
                 .filter(Funcs.isGzipFile)
+                .peek(path -> {
+                    // fixme: eliminate try catch with exceptionWrapper
+                    try {
+                        Funcs.log.accept("Input file: " + path.getParent() + "\\" + path.getFileName() + "(" + Files.size(path) / 1000 / 1000 + "MB)");
+                        Funcs.log.accept("Start time: " + Funcs.actTime(initTime));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                })
                 .map(Funcs::toProcessableItem)
-                .map(Funcs::toGunzipStream)
-                .forEach(Funcs::writeItemToFile);
+//                .peek(item -> Funcs.log.accept(new Date().getTime()))
+                .map(Funcs.printRunTimeWrapper("gunzip", Funcs::toGunzipStream))
+                .peek(item -> Funcs.log.accept("End time (ms): " + Funcs.actTime(initTime)))
+                .forEach(Funcs.printRunTimeWrapper("file save", Funcs::writeItemToFile));
 
         return null;
     }
